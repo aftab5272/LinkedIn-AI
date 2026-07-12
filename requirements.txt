@@ -1,0 +1,7 @@
+google-genai
+python-dotenv
+requests
+feedparser
+beautifulsoup4
+markdown
+Pillow
