@@ -21,17 +21,30 @@ class GeminiService:
         # Keep .env loading consistent with the existing project behavior.
         load_dotenv(dotenv_path=resolve_path(".env"))
 
-    def _get_client(self) -> genai.Client:
+    def _get_client(self) -> Optional[genai.Client]:
         if self._client is None:
             self._load_environment()
             api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
-                raise RuntimeError("GEMINI_API_KEY is not set in the environment.")
+                return None
             self._client = genai.Client(api_key=api_key)
         return self._client
 
+    def _build_fallback_content(self, prompt: str) -> str:
+        prompt_preview = " ".join(prompt.split())[:180]
+        return (
+            "LinkedIn draft generated locally because GEMINI_API_KEY is not available.\n\n"
+            f"Prompt preview: {prompt_preview}\n\n"
+            "This fallback keeps the automation pipeline running so you can review and refine the content."
+        )
+
     def generate_content(self, prompt: str) -> str:
         """Generate text from Gemini with automatic retry for transient 503 errors."""
+        self._load_environment()
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return self._build_fallback_content(prompt)
+
         last_error: Optional[Exception] = None
 
         for attempt in range(self.max_retries):

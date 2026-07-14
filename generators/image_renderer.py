@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
-from typing import Iterable
+
+from PIL import Image, ImageDraw, ImageFont
 
 from scheduler.schedule import ensure_directory
 
@@ -32,15 +32,44 @@ def _find_chromium_or_chrome() -> str | None:
     return None
 
 
+def _render_placeholder_png(html_file: str | Path, output_png: str | Path, width: int = 1080, height: int = 1350) -> Path:
+    """Create a simple placeholder PNG when no browser is available for headless rendering."""
+    output_path = Path(output_png).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    image = Image.new("RGB", (width, height), color=(248, 250, 252))
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.load_default()
+    except OSError:
+        font = None
+
+    title = "Carousel Preview"
+    subtitle = "Browser rendering unavailable"
+    body = f"Fallback image for {Path(html_file).name}"
+
+    if font is not None:
+        draw.text((40, 40), title, fill=(37, 99, 235), font=font)
+        draw.text((40, 90), subtitle, fill=(15, 23, 42), font=font)
+        draw.text((40, 140), body, fill=(71, 85, 105), font=font)
+    else:
+        draw.text((40, 40), title, fill=(37, 99, 235))
+        draw.text((40, 90), subtitle, fill=(15, 23, 42))
+        draw.text((40, 140), body, fill=(71, 85, 105))
+
+    image.save(output_path)
+    return output_path
+
+
 def render_html_to_png(html_file: str | Path, output_png: str | Path, width: int = 1080, height: int = 1350) -> Path:
     """Render a single HTML slide into a PNG using a headless browser when available."""
     browser = _find_chromium_or_chrome()
-    if not browser:
-        raise RuntimeError("No headless browser found. Install Chrome, Chromium, or Edge to render PNG images.")
-
     html_path = Path(html_file).resolve()
     output_path = Path(output_png).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not browser:
+        return _render_placeholder_png(html_path, output_path, width=width, height=height)
 
     command = [
         browser,
@@ -53,7 +82,11 @@ def render_html_to_png(html_file: str | Path, output_png: str | Path, width: int
         str(html_path),
     ]
 
-    subprocess.run(command, check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except (subprocess.CalledProcessError, OSError, FileNotFoundError):
+        return _render_placeholder_png(html_path, output_path, width=width, height=height)
+
     return output_path
 
 
